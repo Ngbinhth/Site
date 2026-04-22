@@ -1,0 +1,302 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Zap, Activity, Dna, Globe, Fingerprint, RefreshCcw, Search, Dices, Shield, Cpu, Flame, Star, ChevronUp, Layers, Wand2, Sparkles, X, Trash2 } from 'lucide-react';
+
+// ==========================================
+// 1. CƠ SỞ DỮ LIỆU 100 DNA & ULTIMATE
+// ==========================================
+const ALIEN_DB = Array.from({ length: 100 }, (_, i) => {
+  const baseAliens = [
+    { name: "Heatblast", power: "Điều khiển lửa", planet: "Pyros", type: "Hỏa", hasUltimate: false },
+    { name: "Wildmutt", power: "Siêu khứu giác", planet: "Vulpin", type: "Thú", hasUltimate: true },
+    { name: "Diamondhead", power: "Cấu trúc tinh thể", planet: "Petropia", type: "Khoáng vật", hasUltimate: false },
+    { name: "XLR8", power: "Vận tốc ánh sáng", planet: "Kinet", type: "Tốc độ", hasUltimate: false },
+    { name: "Four Arms", power: "Sức mạnh cơ bắp x4", planet: "Khoros", type: "Chiến binh", hasUltimate: false },
+    { name: "Cannonbolt", power: "Giáp lăn xả", planet: "Arburia", type: "Phòng thủ", hasUltimate: true },
+    { name: "Swampfire", power: "Lửa & Tái tạo", planet: "Methanos", type: "Hỏa/Mộc", hasUltimate: true },
+    { name: "Humungousaur", power: "Tăng trưởng mật độ", planet: "Terradino", type: "Sức mạnh", hasUltimate: true },
+    { name: "Echo Echo", power: "Nhân bản âm thanh", planet: "Sonorosia", type: "Âm thanh", hasUltimate: true },
+    { name: "Big Chill", power: "Đóng băng tuyệt đối", planet: "Kylmyys", type: "Băng", hasUltimate: true },
+    { name: "Way Big", power: "Kích thước Cosmic", planet: "Cosmic Storms", type: "Vũ trụ", hasUltimate: true },
+    { name: "Alien X", power: "Thao túng thực tại", planet: "Forge of Creation", type: "Thần thánh", hasUltimate: false },
+  ];
+  
+  const base = baseAliens[i % baseAliens.length];
+  return {
+    id: i + 1,
+    name: i < 24 ? base.name : (i < 80 ? `${base.name} Gen-${Math.floor(i/10)}` : `X-DNA ${i+1}`),
+    power: base.power,
+    planet: base.planet,
+    type: base.type,
+    hasUltimate: base.hasUltimate,
+    isUltimate: false,
+    basePower: 100 + (i * 2)
+  };
+});
+
+// Thêm các mẫu Ultimate đặc biệt vào DB (giả lập)
+const ULTIMATE_FORMS: Record<string, any> = {
+  "Wildmutt": { name: "Ultimate Wildmutt", power: "Tiếng hú chết chóc", type: "ULTIMATE", isUltimate: true },
+  "Cannonbolt": { name: "Ultimate Cannonbolt", power: "Giáp gai kim loại", type: "ULTIMATE", isUltimate: true },
+  "Swampfire": { name: "Ultimate Swampfire", power: "Bom lửa xanh", type: "ULTIMATE", isUltimate: true },
+  "Humungousaur": { name: "Ultimate Humungousaur", power: "Tên lửa sinh học", type: "ULTIMATE", isUltimate: true },
+  "Echo Echo": { name: "Ultimate Echo Echo", power: "Đĩa sóng âm sonic", type: "ULTIMATE", isUltimate: true },
+  "Big Chill": { name: "Ultimate Big Chill", power: "Lửa băng giá", type: "ULTIMATE", isUltimate: true },
+  "Way Big": { name: "Ultimate Way Big", power: "Siêu chiến binh vũ trụ", type: "ULTIMATE", isUltimate: true },
+};
+
+// ==========================================
+// 2. HỆ THỐNG ÂM THANH (SFX)
+// ==========================================
+const sfx = {
+  init: () => {
+    if (!window.audioCtx) window.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (window.audioCtx.state === 'suspended') window.audioCtx.resume();
+  },
+  play: (freq: number, type: OscillatorType, duration: number, vol: number) => {
+    try {
+      sfx.init();
+      const osc = window.audioCtx.createOscillator();
+      const gain = window.audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, window.audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol, window.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, window.audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(window.audioCtx.destination);
+      osc.start();
+      osc.stop(window.audioCtx.currentTime + duration);
+    } catch (e) {}
+  },
+  hover: () => sfx.play(800, 'sine', 0.05, 0.02),
+  click: () => sfx.play(1200, 'square', 0.1, 0.04),
+  evolve: () => sfx.play(200, 'sawtooth', 0.6, 0.05),
+  merge: () => sfx.play(400, 'triangle', 1.0, 0.06),
+};
+
+// ==========================================
+// 3. COMPONENT CHÍNH
+// ==========================================
+export default function UltraOmnitrixSystem() {
+  const [selectedId, setSelectedId] = useState<number>(1);
+  const [fusionList, setFusionList] = useState<number[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [fusionResult, setFusionResult] = useState<any>(null);
+
+  const filteredAliens = useMemo(() => 
+    ALIEN_DB.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [searchTerm]
+  );
+
+  const currentAlien = ALIEN_DB.find(a => a.id === selectedId);
+
+  // Xử lý Hợp nhất (Tối đa 10)
+  const toggleFusion = (id: number) => {
+    sfx.click();
+    if (fusionList.includes(id)) {
+      setFusionList(fusionList.filter(i => i !== id));
+    } else if (fusionList.length < 10) {
+      setFusionList([...fusionList, id]);
+    }
+  };
+
+  // Xử lý Tiến hóa Ultimate
+  const handleEvolve = () => {
+    if (!currentAlien?.hasUltimate) return;
+    sfx.evolve();
+    setIsProcessing(true);
+    setTimeout(() => {
+      const ultimateData = ULTIMATE_FORMS[currentAlien.name];
+      if (ultimateData) {
+        setFusionResult({ ...currentAlien, ...ultimateData, rank: "ULTIMATE", color: "text-red-500" });
+      }
+      setIsProcessing(false);
+    }, 800);
+  };
+
+  // Xử lý Hợp nhất 4S
+  const startFusion = () => {
+    if (fusionList.length < 2) return;
+    sfx.merge();
+    setIsProcessing(true);
+    setFusionResult(null);
+    
+    setTimeout(() => {
+      const count = fusionList.length;
+      let rank = "B";
+      let color = "text-slate-400";
+      if (count === 7) { rank = "SS"; color = "text-yellow-400"; }
+      else if (count === 8) { rank = "SSS"; color = "text-orange-500"; }
+      else if (count >= 9) { rank = "SSSS"; color = "text-purple-500 shadow-purple-500/50"; }
+      else if (count > 4) { rank = "S"; color = "text-green-400"; }
+      else if (count > 2) { rank = "A"; color = "text-blue-400"; }
+
+      setFusionResult({
+        name: `MEGA-HYBRID ${count}X`,
+        rank: rank,
+        power: count * 450 + Math.floor(Math.random() * 500),
+        color: color,
+        isFusion: true
+      });
+      setIsProcessing(false);
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#020502] text-green-500 font-mono p-4 md:p-8 relative overflow-hidden">
+      {/* Hiệu ứng nền Scanline */}
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50" />
+
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-8 relative z-10">
+        
+        {/* PANEL TRÁI: DANH SÁCH 100 DNA */}
+        <div className="lg:col-span-7 flex flex-col h-[85vh]">
+          <header className="mb-6 flex justify-between items-end border-b border-green-900 pb-4">
+            <div>
+              <h1 className="text-3xl font-black italic tracking-tighter text-white">ULTIMATRIX <span className="text-green-500 text-sm">v6.0</span></h1>
+              <p className="text-[10px] text-green-800 tracking-[0.3em]">CORE REPOSITORY: 100 ACTIVE DNA</p>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-green-900" size={14}/>
+              <input 
+                className="bg-green-950/20 border border-green-900 rounded py-2 pl-10 pr-4 text-[10px] w-48 focus:border-green-500 outline-none transition-all"
+                placeholder="QUÉT DNA..."
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </header>
+
+          <div className="grid grid-cols-5 md:grid-cols-8 gap-2 overflow-y-auto pr-2 custom-scrollbar">
+            {filteredAliens.map(alien => (
+              <button
+                key={alien.id}
+                onMouseEnter={sfx.hover}
+                onClick={() => { sfx.click(); setSelectedId(alien.id); }}
+                className={`relative aspect-square flex flex-col items-center justify-center border text-[9px] transition-all group ${
+                  selectedId === alien.id ? 'bg-green-500/20 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'bg-black border-green-900/40 hover:border-green-600'
+                }`}
+              >
+                {fusionList.includes(alien.id) && <div className="absolute top-0 left-0 w-full h-full bg-blue-500/10 border-2 border-blue-500 z-10" />}
+                <span className="opacity-30 text-[8px]">{alien.id}</span>
+                <span className="font-bold truncate w-full px-1 text-center">{alien.name}</span>
+                <div 
+                  onClick={(e) => { e.stopPropagation(); toggleFusion(alien.id); }}
+                  className="absolute bottom-0 right-0 p-1 hover:text-white"
+                >
+                  <Plus size={10} className={fusionList.includes(alien.id) ? "text-blue-400" : "text-green-900"} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* PANEL PHẢI: TRUNG TÂM ĐIỀU KHIỂN */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="flex-1 bg-gradient-to-b from-green-950/20 to-black border-2 border-green-500/30 rounded-3xl p-8 relative overflow-hidden group">
+            
+            {isProcessing ? (
+              <div className="h-full flex flex-col items-center justify-center animate-pulse">
+                <RefreshCcw size={64} className="animate-spin text-green-500 mb-4" />
+                <h3 className="text-xl font-black tracking-[0.5em]">PROCESSING...</h3>
+              </div>
+            ) : fusionResult ? (
+              <div className="h-full flex flex-col items-center justify-center text-center animate-in zoom-in">
+                <div className={`text-8xl font-black italic tracking-tighter mb-4 ${fusionResult.color}`}>
+                  {fusionResult.rank}
+                </div>
+                <h2 className="text-3xl font-black text-white uppercase mb-2">{fusionResult.name}</h2>
+                <div className="flex gap-4 text-xs font-bold text-green-700 mb-8 uppercase tracking-widest">
+                   <span>Power: {fusionResult.power || "???"}</span>
+                   <span>Stability: 100%</span>
+                </div>
+                <button 
+                  onClick={() => { setFusionResult(null); setFusionList([]); }}
+                  className="px-8 py-3 bg-red-600 text-black font-black hover:bg-red-500 transition-all active:scale-95"
+                >
+                  RESET SYSTEM
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-[10px] text-green-800 uppercase font-black">DNA Profile</div>
+                    <h2 className="text-4xl font-black text-white tracking-tighter uppercase">{currentAlien?.name}</h2>
+                  </div>
+                  <div className="bg-green-500 text-black text-[10px] px-2 py-1 font-black">LV. 100</div>
+                </div>
+
+                <div className="space-y-4">
+                  <InfoItem icon={<Globe size={16}/>} label="Hành tinh" value={currentAlien?.planet} />
+                  <InfoItem icon={<Zap size={16}/>} label="Năng lực" value={currentAlien?.power} color="text-green-300" />
+                  <InfoItem icon={<Shield size={16}/>} label="Hệ tộc" value={currentAlien?.type} />
+                </div>
+
+                <div className="pt-6 grid grid-cols-2 gap-4 border-t border-green-900">
+                  <button className="bg-green-600 text-black font-black py-4 flex items-center justify-center gap-2 hover:bg-green-400 transition-all active:scale-95">
+                    <RefreshCcw size={18} /> TRANSFORM
+                  </button>
+                  {currentAlien?.hasUltimate && (
+                    <button 
+                      onClick={handleEvolve}
+                      className="border-2 border-red-600 text-red-600 font-black py-4 flex items-center justify-center gap-2 hover:bg-red-600 hover:text-white transition-all"
+                    >
+                      <ChevronUp size={18} /> ULTIMATE
+                    </button>
+                  )}
+                </div>
+
+                {/* KHU VỰC HỢP NHẤT */}
+                <div className="mt-8 p-6 bg-blue-950/10 border-2 border-dashed border-blue-900/50 rounded-2xl">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
+                      <Layers size={14}/> Fusion Chamber ({fusionList.length}/10)
+                    </span>
+                    {fusionList.length > 0 && <Trash2 size={14} className="text-red-900 cursor-pointer hover:text-red-500" onClick={() => setFusionList([])} />}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {fusionList.map(id => (
+                      <div key={id} className="w-8 h-8 rounded border border-blue-500 flex items-center justify-center text-[10px] font-black bg-blue-500/20">
+                        {id}
+                      </div>
+                    ))}
+                    {Array.from({ length: 10 - fusionList.length }).map((_, i) => (
+                      <div key={i} className="w-8 h-8 rounded border border-blue-900/20 flex items-center justify-center text-[10px] opacity-20">?</div>
+                    ))}
+                  </div>
+                  <button 
+                    disabled={fusionList.length < 2}
+                    onClick={startFusion}
+                    className={`w-full py-4 font-black tracking-widest flex items-center justify-center gap-2 transition-all ${
+                      fusionList.length >= 2 ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-500' : 'bg-slate-900 text-slate-700 cursor-not-allowed'
+                    }`}
+                  >
+                    <Wand2 size={18} /> INITIATE 4S FUSION
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #064e3b; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #22c55e; }
+      `}</style>
+    </div>
+  );
+}
+
+function InfoItem({ icon, label, value, color = "text-white" }: any) {
+  return (
+    <div className="flex items-center gap-4 border-l-2 border-green-900 pl-4 py-1">
+      <div className="text-green-800">{icon}</div>
+      <div>
+        <div className="text-[9px] text-green-900 uppercase font-black">{label}</div>
+        <div className={`text-sm font-bold ${color}`}>{value}</div>
+      </div>
+    </div>
+  );
+}
